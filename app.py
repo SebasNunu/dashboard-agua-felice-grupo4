@@ -4,7 +4,6 @@ Dashboard Streamlit basado en el Excel final del grupo.
 Mantén datos_agua_felice.xlsx en la misma carpeta que este script.
 """
 from pathlib import Path
-from html import escape
 
 import numpy as np
 import pandas as pd
@@ -29,6 +28,8 @@ TEXT = "#EAF3FF"
 MUTED = "#9CB3D0"
 
 st.markdown("""
+
+
 <style>
 .stApp {background:#0E1628;color:#EAF3FF;}
 [data-testid="stSidebar"] {background:#17233B;}
@@ -40,26 +41,14 @@ st.markdown("""
 [data-testid="stHeader"] {background:#0E1628;}
 .block-container {padding-top:1.65rem;max-width:1600px;}
 div[data-testid="stDataFrame"] {border:1px solid #314361;border-radius:12px;}
-/* Textos legibles y fondo oscuro en desplegables de alternativas */
+/* Mejorar visibilidad de los desplegables */
 [data-testid="stExpander"] summary {
     background-color: #20314F !important;
     border-radius: 8px;
 }
-[data-testid="stExpander"] summary,
-[data-testid="stExpander"] summary * {
-    color: #FFFFFF !important;
-}
-.formula-card {
-    background: #20314F;
-    color: #F1F7FF;
-    border: 1px solid #3B5073;
-    border-radius: 10px;
-    padding: 13px 16px;
-    font-size: 1rem;
-    line-height: 1.5;
-}
-</style>
-""", unsafe_allow_html=True)
+
+
+}""", unsafe_allow_html=True)
 
 EXCEL = Path(__file__).resolve().parent / "datos_agua_felice.xlsx"
 
@@ -254,7 +243,7 @@ elif pagina == "Problemas":
     k4.metric("VAN del caso base",moneda(fila["VAN base (S/)"]))
 
     opciones = st.tabs(["📊 Diagnóstico", "🔎 Análisis de causas", "🧩 Metodología y restricciones",
-                        "🎯 Indicadores y AS-IS / TO-BE", "💰 Evaluación económica", "🎲 Monte Carlo"])
+                        "🎯 Indicadores y AS-IS / TO-BE", "💰 Evaluación económica"])
 
     with opciones[0]:
         izq,der=st.columns([1.6,1])
@@ -354,12 +343,13 @@ elif pagina == "Problemas":
         fig.update_layout(title="AS-IS · escenario del modelo · TO-BE propuesto",
                           yaxis_title="Porcentaje (%)",yaxis_range=[0,max(110,1.17*max(vals))])
         st.plotly_chart(formato_fig(fig,370),use_container_width=True)
-        st.caption("Histórico: registros de 2025 · Esperado: proyección del modelo · Meta: propuesta del grupo")
+        st.caption("Histórico = registros 2025; Meta = objetivo de la propuesta; "
+                   "Esperado = resultado proyectado con supuestos de cumplimiento del modelo, no una observación física.")
         st.markdown("##### Fórmulas e indicadores")
         for f in inf["formulas"]:
             with st.expander(f["indicador"]+" · "+f["valor"],expanded=(f==inf["formulas"][0])):
                 st.markdown("**Fórmula**")
-                st.markdown(f'<div class="formula-card">{escape(f["formula"])}</div>', unsafe_allow_html=True)
+                st.code(f["formula"],language=None)
                 st.caption("Cálculo reportado: "+f["calculo"])
         with st.expander("Ver indicadores de proceso del informe"):
             proc=inf["procesos"]
@@ -376,15 +366,8 @@ elif pagina == "Problemas":
         ec2.metric("VAN medio Monte Carlo",moneda(fila["VAN medio MC (S/)"]))
         ec3.metric("Relación B/C",f"{float(fila['B/C']):.2f}")
         ec4.metric("Prob. VAN positivo",f"{float(fila['P(VAN>0)'])*100:.1f}%")
-        e1, e2, e3 = st.columns(3)
-        tir = float(fila["TIR por periodo"])
-        e1.metric("TIR por periodo", ">1,000 %" if tir > 10 else f"{tir*100:,.1f} %")
-        e2.metric("Periodo de recuperación", (
-            f"{float(fila['PRC (meses)']):.2f} meses" if isinstance(fila["PRC (meses)"], (int,float,np.integer,np.floating))
-            else str(fila["PRC (meses)"])))
-        e3.metric("Horizonte de evaluación", f"{int(fila['Horizonte N (meses)'])} meses")
         if fila["VAN base (S/)"]<0:
-            st.caption("Decisión del caso base: no viable económicamente en el horizonte evaluado.")
+            st.caption("Decisión del caso base reportada por el grupo: no viable económicamente en el horizonte evaluado.")
         izq,der=st.columns(2)
         with izq:
             fig=go.Figure(go.Bar(x=["VAN base","VAN medio MC"],
@@ -404,37 +387,6 @@ elif pagina == "Problemas":
             st.plotly_chart(formato_fig(fig,330),use_container_width=True)
         st.caption("Fuente: hoja Resumen del Excel final; Monte Carlo se analiza en detalle desde "
                    "el menú lateral «Simulación Monte Carlo».")
-
-    with opciones[5]:
-        st.markdown(f"#### Simulación Monte Carlo · {problema}")
-        try:
-            mc_p = leer_montecarlo(str(EXCEL), problema)
-            sens_p = leer_sensibilidad(str(EXCEL), problema)
-        except Exception as error:
-            st.error(f"No se pudo leer la simulación de {problema}: {error}")
-        else:
-            van_p = mc_p["VAN (S/)"]
-            x1,x2,x3,x4 = st.columns(4)
-            x1.metric("Iteraciones", f"{len(mc_p):,}")
-            x2.metric("VAN medio", moneda(van_p.mean()))
-            x3.metric("Prob. VAN positivo", f"{van_p.gt(0).mean()*100:.1f} %")
-            x4.metric("Intervalo P5–P95", f"{van_p.quantile(.05):,.0f} / {van_p.quantile(.95):,.0f}")
-            izq,der = st.columns(2)
-            with izq:
-                fig=px.histogram(mc_p,x="VAN (S/)",nbins=42,color_discrete_sequence=[CYAN])
-                fig.add_vline(x=0,line_color=PINK,line_dash="dash")
-                fig.update_layout(title="Distribución de VAN · 2,000 iteraciones",yaxis_title="Frecuencia")
-                st.plotly_chart(formato_fig(fig,335),use_container_width=True)
-            with der:
-                fig=px.bar(sens_p,x="Correlación",y="Variable",orientation="h",
-                           color="Correlación",color_continuous_scale=[PINK,"#B3B8D0",CYAN])
-                fig.update_layout(title="Sensibilidad del VAN",yaxis_title="",coloraxis_showscale=False)
-                st.plotly_chart(formato_fig(fig,335),use_container_width=True)
-            with st.expander("Consultar y descargar las 2,000 iteraciones"):
-                st.dataframe(mc_p,hide_index=True,use_container_width=True,height=300)
-                st.download_button("Descargar CSV",mc_p.to_csv(index=False).encode("utf-8-sig"),
-                                   file_name=f"MonteCarlo_{problema}_2000.csv",mime="text/csv",
-                                   key=f"download_mc_tab_{problema}")
 
 elif pagina == "Simulación Monte Carlo":
     problema = st.selectbox("Simulación por problema", list(NOMBRES),
